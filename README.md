@@ -60,3 +60,7 @@ asdf global uv latest
 # Install Python dependencies
 uv sync
 ```
+
+### Using uv with Jupyter
+
+See <https://docs.astral.sh/uv/guides/integration/jupyter/>

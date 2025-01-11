@@ -1,0 +1,45 @@
+[project]
+name = "rhlf-book"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "box2d-py>=2.3.8",
+    "flappy-bird-gymnasium>=0.4.0",
+    "gym>=0.26.2",
+    "gymnasium[mujoco,mujoco-py]>=1.0.0",
+    "huggingface-sb3>=3.0",
+    "ipywidgets>=8.1.5",
+    "jupyterlab>=4.3.4",
+    "lightning>=2.5.0.post0",
+    "matplotlib>=3.10.0",
+    "moviepy>=2.1.2",
+    "panda-gym",
+    "pettingzoo[butterfly]>=1.24.3",
+    "rl-zoo3>=2.4.0",
+    "rliable>=1.2.0",
+    "scipy>=1.15.1",
+    "seaborn>=0.13.2",
+    "stable-baselines3[extra]>=2.4.1",
+    "supersuit>=3.9.3",
+    "tensorflow>=2.18.0",
+    "torch>=2.5.1",
+    "torchaudio>=2.5.1",
+    "torchvision>=0.20.1",
+    "wandb>=0.19.2",
+]
+
+[tool.uv.sources]
+panda-gym = { git = "https://github.com/qgallouedec/panda-gym", rev = "master" }
+torch = [
+    { index = "pytorch-cpu" },
+]
+torchvision = [
+    { index = "pytorch-cpu" },
+]
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true

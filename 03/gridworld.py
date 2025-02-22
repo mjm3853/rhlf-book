@@ -3,11 +3,12 @@ import sys
 from contextlib import closing
 from io import StringIO
 
-# Constants for cardinal directions with more descriptive names
-DIRECTION_UP = 0
-DIRECTION_RIGHT = 1
-DIRECTION_DOWN = 2
-DIRECTION_LEFT = 3
+# Constants for cardinal directions
+# Mapped to indices for array operations
+UP = 0
+RIGHT = 1
+DOWN = 2
+LEFT = 3
 
 class GridworldEnv():
     """
@@ -20,99 +21,124 @@ class GridworldEnv():
     Reward of -1 at each step until agent reaches a terminal state.
     """
 
+    # Supported rendering modes for the environment
     metadata = {'render.modes': ['human', 'ansi']}
 
     def __init__(self):
-        # Define grid dimensions
-        self.grid_shape = (4, 4)
+        # Define grid dimensions (4x4)
+        self.shape = (4, 4)
         
-        # Calculate total number of states and actions
-        self.number_of_states = np.prod(self.grid_shape)
-        self.number_of_actions = 4
+        # Calculate total number of states (16 for 4x4 grid)
+        self.nS = np.prod(self.shape)
+        # Number of possible actions in each state
+        self.nA = 4
+
+        # Initialize current state
+        self.s = None  # Current state of the agent
 
         # Dictionary to store state transition dynamics
-        transitions = {}
-        for state in range(self.number_of_states):
+        P = {}
+        for s in range(self.nS):
             # Convert 1D state index to 2D grid coordinates
-            grid_position = np.unravel_index(state, self.grid_shape)
+            position = np.unravel_index(s, self.shape)
             # Initialize transitions for each action
-            transitions[state] = {action: [] for action in range(self.number_of_actions)}
+            P[s] = {a: [] for a in range(self.nA)}
             # Calculate transition probabilities for each action
-            transitions[state][DIRECTION_UP] = self.transition_prob(grid_position, [-1, 0])
-            transitions[state][DIRECTION_RIGHT] = self.transition_prob(grid_position, [0, 1])
-            transitions[state][DIRECTION_DOWN] = self.transition_prob(grid_position, [1, 0])
-            transitions[state][DIRECTION_LEFT] = self.transition_prob(grid_position, [0, -1])
+            # Format: (probability, next_state, reward, done)
+            P[s][UP] = self.transition_prob(position, [-1, 0])      # Move up
+            P[s][RIGHT] = self.transition_prob(position, [0, 1])    # Move right
+            P[s][DOWN] = self.transition_prob(position, [1, 0])     # Move down
+            P[s][LEFT] = self.transition_prob(position, [0, -1])    # Move left
 
         # Set uniform initial state distribution
-        initial_state_distribution = np.ones(self.number_of_states) / self.number_of_states
+        isd = np.ones(self.nS) / self.nS
 
         # Store transition dynamics for model-based learning
-        self.transitions = transitions
+        self.P = P
 
-    def limit_coordinates(self, coordinates):
+    def limit_coordinates(self, coord):
         """
         Prevent the agent from falling out of the grid world by clamping coordinates
-        :param coordinates: a tuple(x,y) position on the grid
+        :param coord: a tuple(x,y) position on the grid
         :return: new coordinates ensuring that they are within the grid world
         """
-        # Clamp row coordinate
-        coordinates[0] = min(coordinates[0], self.grid_shape[0] - 1)
-        coordinates[0] = max(coordinates[0], 0)
-        # Clamp column coordinate
-        coordinates[1] = min(coordinates[1], self.grid_shape[1] - 1)
-        coordinates[1] = max(coordinates[1], 0)
-        return coordinates
+        # Clamp row coordinate between 0 and max row index
+        coord[0] = min(coord[0], self.shape[0] - 1)
+        coord[0] = max(coord[0], 0)
+        # Clamp column coordinate between 0 and max column index
+        coord[1] = min(coord[1], self.shape[1] - 1)
+        coord[1] = max(coord[1], 0)
+        return coord
 
-    def transition_prob(self, current_position, movement_delta):
+    def transition_prob(self, current, delta):
         """
         Model Transitions. Probability is always 1.0 (deterministic environment)
-        :param current_position: Current position on the grid as (row, col)
-        :param movement_delta: Change in position for transition [δrow, δcol]
+        :param current: Current position on the grid as (row, col)
+        :param delta: Change in position for transition [δrow, δcol]
         :return: [(1.0, new_state, reward, done)] - List with single transition tuple
         """
-        # Convert current position to state index
-        current_state = np.ravel_multi_index(tuple(current_position), self.grid_shape)
+        # Convert current 2D position to 1D state index
+        current_state = np.ravel_multi_index(tuple(current), self.shape)
         
-        # Handle terminal states
-        if current_state == 0 or current_state == self.number_of_states - 1:
+        # Handle terminal states (top-left and bottom-right corners)
+        if current_state == 0 or current_state == self.nS - 1:
             return [(1.0, current_state, 0, True)]
 
-        # Calculate new position
-        new_position = np.array(current_position) + np.array(movement_delta)
+        # Calculate new position by adding movement delta
+        new_position = np.array(current) + np.array(delta)
+        # Ensure new position is within grid boundaries
         new_position = self.limit_coordinates(new_position).astype(int)
-        next_state = np.ravel_multi_index(tuple(new_position), self.grid_shape)
+        # Convert new 2D position to 1D state index
+        new_state = np.ravel_multi_index(tuple(new_position), self.shape)
 
         # Check if new state is terminal
-        is_terminal = next_state == 0 or next_state == self.number_of_states - 1
-        return [(1.0, next_state, -1, is_terminal)]
+        is_done = new_state == 0 or new_state == self.nS - 1
+        # Return transition tuple with -1 reward for non-terminal moves
+        return [(1.0, new_state, -1, is_done)]
 
-    def render(self, render_mode='human'):
+    def render(self, mode='human'):
         """
         Render the grid world environment
-        :param render_mode: 'human' for stdout or 'ansi' for string buffer
+        :param mode: 'human' for stdout or 'ansi' for string buffer
         :return: None for 'human' mode, string for 'ansi' mode
         """
-        output_file = StringIO() if render_mode == 'ansi' else sys.stdout
+        # Select output destination based on mode
+        outfile = StringIO() if mode == 'ansi' else sys.stdout
 
-        for state in range(self.number_of_states):
-            grid_position = np.unravel_index(state, self.grid_shape)
-            if self.current_state == state:
-                cell_display = " x "  # Agent position
-            elif state == 0 or state == self.number_of_states - 1:
-                cell_display = " T "  # Terminal states
+        # Iterate through all states to create grid visualization
+        for s in range(self.nS):
+            position = np.unravel_index(s, self.shape)
+            if self.s == s:
+                output = " x "  # Mark current agent position
+            elif s == 0 or s == self.nS - 1:
+                output = " T "  # Mark terminal states
             else:
-                cell_display = " o "  # Empty cells
+                output = " o "  # Mark empty cells
 
             # Format grid layout
-            if grid_position[1] == 0:
-                cell_display = cell_display.lstrip()
-            if grid_position[1] == self.grid_shape[1] - 1:
-                cell_display = cell_display.rstrip()
-                cell_display += '\n'
+            if position[1] == 0:  # Left edge
+                output = output.lstrip()
+            if position[1] == self.shape[1] - 1:  # Right edge
+                output = output.rstrip()
+                output += '\n'
 
-            output_file.write(cell_display)
-        output_file.write('\n')
+            outfile.write(output)
+        outfile.write('\n')
 
-        if render_mode != 'human':
-            with closing(output_file):
-                return output_file.getvalue()
+        # Return string representation for ANSI mode
+        if mode != 'human':
+            with closing(outfile):
+                return outfile.getvalue()
+
+    def reset(self):
+        """
+        Reset the environment to a random non-terminal state
+        :return: Initial state
+        """
+        # Initialize to random non-terminal state
+        while True:
+            self.s = np.random.randint(0, self.nS)
+            # Ensure we don't start in terminal states
+            if self.s != 0 and self.s != self.nS - 1:
+                break
+        return self.s
